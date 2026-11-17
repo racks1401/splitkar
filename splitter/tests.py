@@ -61,6 +61,17 @@ class GroupsTestCase(TestCase):
         self.assertEqual(group.created_by, self.user1)
         self.assertTrue(Membership.objects.filter(group=group, user=self.user1).exists())
 
+    def test_dashboard_shows_full_member_count(self):
+        group = ExpenseGroup.objects.create(name='Room 204', created_by=self.user1)
+        for user in (self.user1, self.user2, self.user3):
+            Membership.objects.create(group=group, user=user)
+
+        self.client.login(username='ravi', password='Password123!')
+        response = self.client.get(reverse('dashboard'))
+        groups = list(response.context['groups'])
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0].member_count, 3)
+
     def test_non_member_gets_404_on_group_page(self):
         # Create group by user1
         group = ExpenseGroup.objects.create(name='Goa Trip', created_by=self.user1)

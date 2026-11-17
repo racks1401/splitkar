@@ -28,8 +28,10 @@ def signup(request):
 
 @login_required
 def dashboard(request):
+    # Filter by id so the member count includes every member, not just me
+    my_group_ids = Membership.objects.filter(user=request.user).values('group_id')
     groups = (
-        ExpenseGroup.objects.filter(memberships__user=request.user)
+        ExpenseGroup.objects.filter(id__in=my_group_ids)
         .annotate(member_count=Count('memberships', distinct=True))
         .order_by('-created_at')
     )
