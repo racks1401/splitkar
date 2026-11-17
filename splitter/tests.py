@@ -1,7 +1,9 @@
+from decimal import Decimal
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import User
-from .models import ExpenseGroup, Membership
+from .models import ExpenseGroup, Membership, Expense, ExpenseShare
+from .services import split_equally
 
 
 class AccountsTestCase(TestCase):
@@ -73,6 +75,10 @@ class GroupsTestCase(TestCase):
         response = self.client.get(reverse('member_add', args=[group.id]))
         self.assertEqual(response.status_code, 404)
 
+        # user2 tries to access add expense page
+        response = self.client.get(reverse('expense_create', args=[group.id]))
+        self.assertEqual(response.status_code, 404)
+
     def test_adding_unknown_user_or_existing_member_shows_error_and_adds_nothing(self):
         group = ExpenseGroup.objects.create(name='Room 204', created_by=self.user1)
         Membership.objects.create(group=group, user=self.user1)
@@ -106,3 +112,87 @@ class GroupsTestCase(TestCase):
         self.assertRedirects(response, reverse('group_detail', args=[group.id]))
         self.assertEqual(group.memberships.count(), 2)
         self.assertTrue(group.memberships.filter(user=self.user2).exists())
+
+
+class ExpensesTestCase(TestCase):
+    def setUp(self):
+        self.user1 = User.objects.create_user(username='ravi', password='Password123!')
+        self.user2 = User.objects.create_user(username='aman', password='Password123!')
+        self.user3 = User.objects.create_user(username='sneha', password='Password123!')
+        self.outsider = User.objects.create_user(username='outsider', password='Password123!')
+
+        self.group = ExpenseGroup.objects.create(name='Room 204', created_by=self.user1)
+        Membership.objects.create(group=self.group, user=self.user1)
+        Membership.objects.create(group=self.group, user=self.user2)
+        Membership.objects.create(group=self.group, user=self.user3)
+
+    def test_split_equally_rounding_and_sum(self):
+        # 100 split among 3 users with ravi as payer
+        shares = split_equally(Decimal("100"), [self.user1, self.user2, self.user3], self.user1)
+        self.assertEqual(shares[self.user1], Decimal("33.34"))
+        self.assertEqual(shares[self.user2], Decimal("33.33"))
+        self.assertEqual(shares[self.user3], Decimal("33.33"))
+        self.assertEqual(sum(shares.values()), Decimal("100.00"))
+
+    def test_expense_zero_amount_or_non_member_payer_rejected(self):
+        self.client.login(username='ravi', password='Password123!')
+
+        # 1. Amount 0 should be rejected
+        response_zero = self.client.post(
+            reverse('expense_create', args=[self.group.id]),
+            {
+                'title': 'Free Snack',
+                'amount': '0.00',
+                'paid_by': self.user1.id,
+                'date': '2026-11-17',
+                'participants': [self.user1.id, self.user2.id],
+            },
+        )
+        self.assertEqual(response_zero.status_code, 200)
+        self.assertFormError(response_zero.context['form'], 'amount', "Amount must be greater than 0.")
+        self.assertEqual(Expense.objects.count(), 0)
+
+        # 2. Non-member payer should be rejected
+        response_non_member = self.client.post(
+            reverse('expense_create', args=[self.group.id]),
+            {
+                'title': 'Dinner',
+                'amount': '150.00',
+                'paid_by': self.outsider.id,
+                'date': '2026-11-17',
+                'participants': [self.user1.id, self.user2.id],
+            },
+        )
+        self.assertEqual(response_non_member.status_code, 200)
+        self.assertTrue(response_non_member.context['form'].has_error('paid_by'))
+        self.assertEqual(Expense.objects.count(), 0)
+
+    def test_create_expense_atomic_save_and_display(self):
+        self.client.login(username='ravi', password='Password123!')
+
+        response = self.client.post(
+            reverse('expense_create', args=[self.group.id]),
+            {
+                'title': 'Hostel Wifi',
+                'amount': '100.00',
+                'paid_by': self.user1.id,
+                'date': '2026-11-17',
+                'participants': [self.user1.id, self.user2.id, self.user3.id],
+            },
+            follow=True,
+        )
+        self.assertRedirects(response, reverse('group_detail', args=[self.group.id]))
+
+        # Verify Expense created
+        expense = Expense.objects.get(title='Hostel Wifi')
+        self.assertEqual(expense.amount, Decimal('100.00'))
+        self.assertEqual(expense.paid_by, self.user1)
+
+        # Verify ExpenseShare rows created
+        shares = expense.shares.all()
+        self.assertEqual(shares.count(), 3)
+        self.assertEqual(sum(s.share_amount for s in shares), Decimal('100.00'))
+
+        # Verify expense appears in group detail response
+        self.assertContains(response, 'Hostel Wifi')
+        self.assertContains(response, '₹100.00')

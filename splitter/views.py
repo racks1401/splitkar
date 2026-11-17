@@ -6,8 +6,9 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Count
 
-from .models import ExpenseGroup, Membership
-from .forms import ExpenseGroupForm, MemberAddForm
+from .models import ExpenseGroup, Membership, Expense, ExpenseShare
+from .forms import ExpenseGroupForm, MemberAddForm, ExpenseCreateForm
+from .services import split_equally
 
 
 def signup(request):
@@ -26,7 +27,6 @@ def signup(request):
 
 @login_required
 def dashboard(request):
-    # Retrieve all groups where current user is a member, along with member counts
     groups = (
         ExpenseGroup.objects.filter(memberships__user=request.user)
         .annotate(member_count=Count('memberships', distinct=True))
@@ -58,12 +58,14 @@ def group_detail(request, id):
     # Non-members get 404 so group existence is not revealed
     group = get_object_or_404(ExpenseGroup, id=id, memberships__user=request.user)
     memberships = group.memberships.select_related('user').order_by('joined_at')
+    expenses = group.expenses.select_related('paid_by')
     return render(
         request,
         'splitter/group_detail.html',
         {
             'group': group,
             'memberships': memberships,
+            'expenses': expenses,
         },
     )
 
@@ -82,3 +84,39 @@ def member_add(request, id):
     else:
         form = MemberAddForm(group=group)
     return render(request, 'splitter/member_add.html', {'group': group, 'form': form})
+
+
+@login_required
+def expense_create(request, id):
+    # Non-members get 404
+    group = get_object_or_404(ExpenseGroup, id=id, memberships__user=request.user)
+    if request.method == 'POST':
+        form = ExpenseCreateForm(request.POST, group=group)
+        if form.is_valid():
+            with transaction.atomic():
+                expense = form.save(commit=False)
+                expense.group = group
+                expense.created_by = request.user
+                expense.save()
+
+                # Calculate equal split shares using services logic
+                shares = split_equally(
+                    amount=expense.amount,
+                    participants=form.cleaned_data['participants'],
+                    payer=expense.paid_by,
+                )
+
+                # Persist each participant's share
+                for participant, share_amount in shares.items():
+                    ExpenseShare.objects.create(
+                        expense=expense,
+                        user=participant,
+                        share_amount=share_amount,
+                    )
+
+            messages.success(request, f"Expense '{expense.title}' added successfully.")
+            return redirect('group_detail', id=group.id)
+    else:
+        form = ExpenseCreateForm(group=group)
+
+    return render(request, 'splitter/expense_create.html', {'group': group, 'form': form})
