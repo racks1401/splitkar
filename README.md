@@ -16,7 +16,6 @@ SplitKar enables friends to create shared groups (such as "Room 204" or "Goa Tri
 |:---:|:---:|:---:|
 | ![Dashboard](docs/dashboard.png) | ![Group Detail](docs/group.png) | ![Add Expense](docs/add-expense.png) |
 
-*(Screenshots can be saved as `docs/dashboard.png`, `docs/group.png`, and `docs/add-expense.png`)*
 
 ---
 
@@ -87,7 +86,7 @@ python manage.py test -v 2
 ## Project Structure
 
 ```text
-Expense Splitter/
+splitkar/
 ├── config/                  # Django project configuration
 │   ├── __init__.py
 │   ├── asgi.py
@@ -123,6 +122,7 @@ Expense Splitter/
 │       ├── group_detail.html    # Group overview, balances & expenses
 │       └── member_add.html      # Add member by username
 ├── .gitignore               # Ignores venv, db.sqlite3, __pycache__, .env
+├── LICENSE                  # MIT license
 ├── manage.py                # Django CLI utility
 ├── README.md                # Project documentation
 └── requirements.txt         # Pinned Django version
@@ -149,11 +149,10 @@ $$\text{Balance}(u) = \sum \text{Expenses Paid by } u - \sum \text{Shares Owed b
 
 ---
 
-## Current Limits (Version 1 Scope)
+## Current Limits
 
-In accordance with the Version 1 build specification, the following features are intentionally out of scope:
-- **Equal split only**: No unequal splits, percentages, or custom shares.
-- **No expense editing or deletion**: Once recorded, expenses are immutable.
-- **No settle-up / payment recording**: Tracks net balances only (who pays whom is not in v1).
-- **No member removal or group deletion**: Members cannot be removed or leave groups.
-- **No CSV exports or monthly reports**: Offline SQLite storage only.
+- Expenses are split equally only.
+- An expense cannot be edited or deleted after it is added.
+- The app shows each member's balance but not who should pay whom.
+- Members cannot be removed, and groups cannot be deleted.
+- No CSV import or export.
