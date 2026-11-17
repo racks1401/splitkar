@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth.models import User
 from .models import ExpenseGroup, Membership, Expense, ExpenseShare
-from .services import split_equally
+from .services import split_equally, group_balances
 
 
 class AccountsTestCase(TestCase):
@@ -196,3 +196,87 @@ class ExpensesTestCase(TestCase):
         # Verify expense appears in group detail response
         self.assertContains(response, 'Hostel Wifi')
         self.assertContains(response, '₹100.00')
+
+
+class BalancesTestCase(TestCase):
+    def setUp(self):
+        self.user1 = User.objects.create_user(username='ravi', password='Password123!')
+        self.user2 = User.objects.create_user(username='aman', password='Password123!')
+        self.user3 = User.objects.create_user(username='sneha', password='Password123!')
+
+        self.group = ExpenseGroup.objects.create(name='Room 204', created_by=self.user1)
+        Membership.objects.create(group=self.group, user=self.user1)
+        Membership.objects.create(group=self.group, user=self.user2)
+        Membership.objects.create(group=self.group, user=self.user3)
+
+    def test_empty_group_balances_zero(self):
+        balances = group_balances(self.group)
+        self.assertEqual(balances[self.user1], Decimal('0.00'))
+        self.assertEqual(balances[self.user2], Decimal('0.00'))
+        self.assertEqual(balances[self.user3], Decimal('0.00'))
+        self.assertEqual(sum(balances.values()), Decimal('0.00'))
+
+    def test_balances_match_spec_example_table_and_sum_to_zero(self):
+        # Ravi pays 100 for Ravi, Aman, and Sneha
+        expense = Expense.objects.create(
+            group=self.group,
+            title='Dinner',
+            amount=Decimal('100.00'),
+            paid_by=self.user1,
+            created_by=self.user1,
+        )
+        shares = split_equally(expense.amount, [self.user1, self.user2, self.user3], self.user1)
+        for user, share_amount in shares.items():
+            ExpenseShare.objects.create(
+                expense=expense,
+                user=user,
+                share_amount=share_amount,
+            )
+
+        balances = group_balances(self.group)
+
+        # Spec Example Table:
+        # Ravi: Paid 100.00, Share 33.34, Balance +66.66
+        # Aman: Paid 0.00, Share 33.33, Balance -33.33
+        # Sneha: Paid 0.00, Share 33.33, Balance -33.33
+        self.assertEqual(balances[self.user1], Decimal('66.66'))
+        self.assertEqual(balances[self.user2], Decimal('-33.33'))
+        self.assertEqual(balances[self.user3], Decimal('-33.33'))
+
+        # Balances sum to 0
+        self.assertEqual(sum(balances.values()), Decimal('0.00'))
+
+    def test_balances_displayed_in_group_detail_and_dashboard(self):
+        # Setup the 100 expense paid by ravi
+        expense = Expense.objects.create(
+            group=self.group,
+            title='Groceries',
+            amount=Decimal('100.00'),
+            paid_by=self.user1,
+            created_by=self.user1,
+        )
+        shares = split_equally(expense.amount, [self.user1, self.user2, self.user3], self.user1)
+        for user, share_amount in shares.items():
+            ExpenseShare.objects.create(
+                expense=expense,
+                user=user,
+                share_amount=share_amount,
+            )
+
+        # Check group detail page as ravi
+        self.client.login(username='ravi', password='Password123!')
+        response = self.client.get(reverse('group_detail', args=[self.group.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'gets back ₹66.66')
+        self.assertContains(response, 'owes ₹33.33')
+
+        # Check dashboard as ravi (shows gets back in green)
+        dash_ravi = self.client.get(reverse('dashboard'))
+        self.assertEqual(dash_ravi.status_code, 200)
+        self.assertContains(dash_ravi, 'gets back ₹66.66')
+
+        # Check dashboard as aman (shows owes in red)
+        self.client.login(username='aman', password='Password123!')
+        dash_aman = self.client.get(reverse('dashboard'))
+        self.assertEqual(dash_aman.status_code, 200)
+        self.assertContains(dash_aman, 'owes ₹33.33')

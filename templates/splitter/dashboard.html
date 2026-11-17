@@ -17,6 +17,7 @@
             <th scope="col">Group Name</th>
             <th scope="col">Description</th>
             <th scope="col" class="text-center">Members</th>
+            <th scope="col" class="text-center">My Balance</th>
             <th scope="col" class="text-end">Action</th>
           </tr>
         </thead>
@@ -29,10 +30,15 @@
                 </a>
               </td>
               <td class="text-muted">
-                {{ group.description|default:"—"|truncatechars:60 }}
+                {{ group.description|default:"—"|truncatechars:50 }}
               </td>
               <td class="text-center">
                 <span class="badge bg-secondary rounded-pill">{{ group.member_count }}</span>
+              </td>
+              <td class="text-center text-nowrap">
+                <span class="{{ group.my_balance_display.css_class }} fw-bold">
+                  {{ group.my_balance_display.text }}
+                </span>
               </td>
               <td class="text-end">
                 <a href="{% url 'group_detail' group.id %}" class="btn btn-outline-primary btn-sm">
