@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}{{ group.name }} - SplitKar{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ group.name }}</li>
+  </ol>
+</nav>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+      <div>
+        <h2 class="h3 fw-bold mb-1">{{ group.name }}</h2>
+        {% if group.description %}
+          <p class="text-secondary mb-2">{{ group.description }}</p>
+        {% endif %}
+        <small class="text-muted">
+          Created by <strong>{{ group.created_by.username }}</strong> on {{ group.created_at|date:"M d, Y" }}
+        </small>
+      </div>
+      <div>
+        <a href="{% url 'member_add' group.id %}" class="btn btn-outline-primary btn-sm">
+          + Add Member
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h5 class="mb-0 fw-semibold">Members ({{ memberships|length }})</h5>
+    <a href="{% url 'member_add' group.id %}" class="btn btn-primary btn-sm">Add Member</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th scope="col">Username</th>
+          <th scope="col">Joined On</th>
+          <th scope="col" class="text-end">Role</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for membership in memberships %}
+          <tr>
+            <td>
+              <span class="fw-medium">{{ membership.user.username }}</span>
+              {% if membership.user == request.user %}
+                <span class="badge bg-light text-dark border ms-1">You</span>
+              {% endif %}
+            </td>
+            <td class="text-muted">{{ membership.joined_at|date:"M d, Y" }}</td>
+            <td class="text-end">
+              {% if membership.user == group.created_by %}
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Creator</span>
+              {% else %}
+                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Member</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

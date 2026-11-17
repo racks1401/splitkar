@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Create Group - SplitKar{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h3 class="card-title mb-4">Create New Group</h3>
+
+        {% if form.errors %}
+          <div class="alert alert-danger py-2 small">
+            Please fix the errors below.
+          </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'group_create' %}">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="{{ form.name.id_for_label }}" class="form-label fw-semibold">Group Name *</label>
+            {{ form.name }}
+            {% for error in form.name.errors %}
+              <div class="text-danger small mt-1">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label for="{{ form.description.id_for_label }}" class="form-label fw-semibold">Description</label>
+            {{ form.description }}
+            {% for error in form.description.errors %}
+              <div class="text-danger small mt-1">{{ error }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center mt-4">
+            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">Create Group</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
